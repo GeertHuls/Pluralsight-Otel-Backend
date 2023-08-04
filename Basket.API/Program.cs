@@ -29,12 +29,15 @@ public class Program
         builder.Services.AddSwaggerGen();
         builder.Services.AddHealthChecks();
 
+        // Exports to the logs collector:
         builder.Host.UseSerilog((hostingContext, loggerConfiguration) => loggerConfiguration
             .ReadFrom.Configuration(hostingContext.Configuration)
             .WriteTo.OpenTelemetry(options =>
             {
+                // Open telemetry collector endpoint:
                 options.Endpoint = $"{Configuration.GetValue<string>("Otlp:Endpoint")}/v1/logs";
                 options.Protocol = Serilog.Sinks.OpenTelemetry.OtlpProtocol.GrpcProtobuf;
+                // Add extra attributes to the log records for filtering purposes:
                 options.ResourceAttributes = new Dictionary<string, object>
                 {
                     ["service.name"] = Configuration.GetValue<string>("Otlp:ServiceName")
@@ -54,10 +57,13 @@ public class Program
         builder.Services.AddOpenTelemetry()
             .ConfigureResource(appResourceBuilder)
             .WithTracing(builder => builder
+                // Instrumentation methods are using in aspnet core api projects.
+                // This will give us extra information about the http requests and responses.
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 .AddSource("APITracing")
                 //.AddConsoleExporter()
+                // Will be sent to otel collector and be processed by tempo:
                 .AddOtlpExporter(options => options.Endpoint = new Uri(Configuration.GetValue<string>("Otlp:Endpoint")))
             )
             .WithMetrics(builder => builder
